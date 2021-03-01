@@ -10,3 +10,5 @@ Require-Bundle: com.archimatetool.commandline;bundle-version="4.6.0",
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Automatic-Module-Name: org.archicontribs.modelrepository.commandline
+Bundle-ClassPath: lib/org.eclipse.jgit_5.9.0.202009080501-r.jar,
+ .

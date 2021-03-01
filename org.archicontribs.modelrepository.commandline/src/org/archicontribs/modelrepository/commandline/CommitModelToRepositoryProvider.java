@@ -157,12 +157,11 @@ public class CommitModelToRepositoryProvider extends AbstractCommandLineProvider
             		, null);
             if(result.isSuccessful()) {            
             	repo.pushToRemote(new UsernamePassword(username, password.toCharArray()), null);
+                logMessage("Model pushed to repo");
             }else {
             	logError("Push error: " + result.getMergeResult().getMergeStatus());
             	logError("Conflicts :" + result.getMergeResult().getConflicts().keySet());
             }
-            
-            logMessage("Model pushed to repo");
         }
         
         loadModel(cloneFolder);
