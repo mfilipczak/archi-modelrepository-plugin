@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 
 import org.archicontribs.modelrepository.authentication.UsernamePassword;
+import org.archicontribs.modelrepository.merge.Strategy;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -86,6 +87,18 @@ public interface IArchiRepository extends IGraficoConstants {
     void cloneModel(String repoURL, UsernamePassword npw, ProgressMonitor monitor) throws GitAPIException, IOException;
 
     /**
+     * Clone a model
+     * @param repoURL
+     * @param branch
+     * @param npw
+     * @param monitor
+     * @throws GitAPIException
+     * @throws IOException
+     */
+    void cloneModel(String repoURL, String branch, UsernamePassword npw, ProgressMonitor monitor) throws GitAPIException, IOException;
+
+    
+    /**
      * Push to Remote
      * @param userName
      * @param userPassword
@@ -103,6 +116,17 @@ public interface IArchiRepository extends IGraficoConstants {
      * @throws GitAPIException
      */
     PullResult pullFromRemote(UsernamePassword npw, ProgressMonitor monitor) throws IOException, GitAPIException;
+    
+    /**
+     * Pull from Remote with strategy
+     * @param npw
+     * @param strategy
+     * @return 
+     * @throws IOException
+     * @throws GitAPIException
+     */
+    PullResult pullFromRemote(UsernamePassword npw, Strategy strategy,  ProgressMonitor monitor) throws IOException, GitAPIException;
+
 
     /**
      * Fetch from Remote
@@ -191,4 +215,6 @@ public interface IArchiRepository extends IGraficoConstants {
      * @throws GitAPIException
      */
     BranchStatus getBranchStatus() throws IOException, GitAPIException;
+
+	String getRemoteURL() throws GitAPIException, IOException;
 }

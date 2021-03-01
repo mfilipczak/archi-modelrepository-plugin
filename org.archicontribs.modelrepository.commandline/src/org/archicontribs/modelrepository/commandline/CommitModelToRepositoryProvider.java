@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Date;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
@@ -20,6 +21,8 @@ import org.archicontribs.modelrepository.grafico.ArchiRepository;
 import org.archicontribs.modelrepository.grafico.GraficoModelImporter;
 import org.archicontribs.modelrepository.grafico.GraficoUtils;
 import org.archicontribs.modelrepository.grafico.IArchiRepository;
+import org.archicontribs.modelrepository.merge.Strategy;
+import org.eclipse.jgit.api.PullResult;
 import org.eclipse.osgi.util.NLS;
 
 import com.archimatetool.commandline.AbstractCommandLineProvider;
@@ -34,28 +37,42 @@ import com.archimatetool.model.IArchimateModel;
  * Usage - (should be all on one line):
  * 
  * Archi -consoleLog -nosplash -application com.archimatetool.commandline.app
-   --modelrepository.cloneModel "url"
+   --modelrepository.commitModel
+   --modelrepository.commitMessage "message"
+   --modelrepository.pushModel
    --modelrepository.loadModel "cloneFolder"
    --modelrepository.userName "userName"
    --modelrepository.passFile "/pathtoPasswordFile"
    --modelrepository.identityFile "/pathtoIdentityFile"
+   --modelrepository.pushConflicts "break/ours/theirs"
  * 
- * This will clone an online Archi model repository into clonefolder.
+ * Archi -consoleLog -nosplash -p -application com.archimatetool.commandline.app
+ *  --modelrepository.cloneModel "c:\dev\archi" 
+ *  --modelrepository.loadModel "repo" 
+ *  --modelrepository.userName "mike" 
+ *  --modelrepository.passFile "pass.txt" 
+ *  --modelrepository.commitModel 
+ *  --modelrepository.commitMessage "moj commit" 
+ *  --modelrepository.pushModel
+ *  --modelrepository.pushConflicts "break/ours/theirs"
  * 
  * @author Phillip Beauvoir
  */
-public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider {
+public class CommitModelToRepositoryProvider extends AbstractCommandLineProvider {
 
-    static final String PREFIX = Messages.LoadModelFromRepositoryProvider_0;
+    static final String PREFIX = Messages.CommitModelToRepositoryProvider_0;
     
-    static final String OPTION_CLONE_MODEL = "modelrepository.cloneModel"; //$NON-NLS-1$
-    static final String OPTION_LOAD_MODEL = "modelrepository.loadModel"; //$NON-NLS-1$
+    static final String OPTION_COMMIT_MODEL = "modelrepository.commitModel"; //$NON-NLS-1$
+    static final String OPTION_COMMIT_MESSAGE = "modelrepository.commitMessage";
+    static final String OPTION_PUSH_MODEL = "modelrepository.pushModel";
+    static final String OPTION_LOAD_MODEL = "modelrepository.loadModel";
     static final String OPTION_USERNAME = "modelrepository.userName"; //$NON-NLS-1$
     static final String OPTION_PASSFILE = "modelrepository.passFile"; //$NON-NLS-1$
     static final String OPTION_SSH_IDENTITY_FILE = "modelrepository.identityFile"; //$NON-NLS-1$
     static final String OPTION_BRANCH_NAME = "modelrepository.branchName";
+    static final String OPTION_PUSH_CONFLICTS = "modelrepository.pushConflicts";
     
-    public LoadModelFromRepositoryProvider() {
+    public CommitModelToRepositoryProvider() {
     }
     
     @Override
@@ -63,22 +80,35 @@ public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider
         if(!hasCorrectOptions(commandLine)) {
             return;
         }
-        
+        logMessage("Uruchamiam commit/push");
         // loadModel folder must be set in both cases:
         // 1. Just load an existing local repository grafico model
         // 2. Clone online repository grafico model to folder specified in (1)
         
         String sFolder = commandLine.getOptionValue(OPTION_LOAD_MODEL);
         if(!StringUtils.isSet(sFolder)) {
-            logError(NLS.bind(Messages.LoadModelFromRepositoryProvider_1, OPTION_LOAD_MODEL));
+            logError(NLS.bind(Messages.CommitModelToRepositoryProvider_1, OPTION_LOAD_MODEL));
             return;
         }
         
         File cloneFolder = new File(sFolder);
-
-        // Clone
-        if(commandLine.hasOption(OPTION_CLONE_MODEL)) {
-            String url = commandLine.getOptionValue(OPTION_CLONE_MODEL);
+        // Commit
+        if(commandLine.hasOption(OPTION_COMMIT_MODEL)) {
+            IArchiRepository repo = new ArchiRepository(cloneFolder);
+            String commitMessage = "Changes " + new Date();
+            if(commandLine.hasOption(OPTION_COMMIT_MESSAGE)) {
+            	commitMessage = commandLine.getOptionValue(OPTION_COMMIT_MESSAGE);
+            }
+            repo.commitChanges(commitMessage, false);
+            logMessage(Messages.CommitModelToRepositoryProvider_5);
+        }
+        
+        // Commit
+        if(commandLine.hasOption(OPTION_PUSH_MODEL)) {
+        	IArchiRepository repo = new ArchiRepository(cloneFolder);
+        	String url = repo.getRemoteURL();
+        	logMessage(url);
+           // String url = commandLine.getOptionValue(OPTION_CLONE_MODEL);
             String username = commandLine.getOptionValue(OPTION_USERNAME);
             String password = getPasswordFromFile(commandLine);
             
@@ -87,28 +117,27 @@ public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider
             boolean isSSH = GraficoUtils.isSSH(url);
             
             if(!StringUtils.isSet(url)) {
-                logError(Messages.LoadModelFromRepositoryProvider_2);
+                logError(Messages.CommitModelToRepositoryProvider_2);
                 return;
             }
             
             if(!isSSH && !StringUtils.isSet(username)) {
-                logError(Messages.LoadModelFromRepositoryProvider_3);
+                logError(Messages.CommitModelToRepositoryProvider_3);
                 return;
             }
             
             if(!isSSH && !StringUtils.isSet(password)) {
-                logError(Messages.LoadModelFromRepositoryProvider_17);
+                logError(Messages.CommitModelToRepositoryProvider_17);
                 return;
             }
             
             if(isSSH && identityFile == null) {
-                logError(Messages.LoadModelFromRepositoryProvider_18);
+                logError(Messages.CommitModelToRepositoryProvider_18);
                 return;
             }
             
-            logMessage(NLS.bind(Messages.LoadModelFromRepositoryProvider_4, url, cloneFolder));
+            logMessage("Pushing to repo");
             
-            FileUtils.deleteFolder(cloneFolder);
             
             // Set this to return our details rather than using the defaults from App prefs
             CredentialsAuthenticator.setSSHIdentityProvider(new SSHIdentityProvider() {
@@ -123,18 +152,20 @@ public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider
                 }
             });
             
-            IArchiRepository repo = new ArchiRepository(cloneFolder);
-            String branch = commandLine.getOptionValue(OPTION_BRANCH_NAME);
-            logMessage("BRANCH: " + branch);
-            repo.cloneModel(url, branch, new UsernamePassword(username, password.toCharArray()), null);
+            PullResult result = repo.pullFromRemote(new UsernamePassword(username, password.toCharArray()), 
+            		Strategy.getStrategyByName(commandLine.getOptionValue("OPTION_PUSH_CONFLICTS", "break"))
+            		, null);
+            if(result.isSuccessful()) {            
+            	repo.pushToRemote(new UsernamePassword(username, password.toCharArray()), null);
+            }else {
+            	logError("Push error: " + result.getMergeResult().getMergeStatus());
+            	logError("Conflicts :" + result.getMergeResult().getConflicts().keySet());
+            }
             
-            logMessage(Messages.LoadModelFromRepositoryProvider_5);
+            logMessage("Model pushed to repo");
         }
         
-        // Load
-        logMessage(NLS.bind(Messages.LoadModelFromRepositoryProvider_6, cloneFolder));
-        IArchimateModel model = loadModel(cloneFolder);
-        logMessage(NLS.bind(Messages.LoadModelFromRepositoryProvider_7, model.getName()));
+        loadModel(cloneFolder);
     }
     
     private IArchimateModel loadModel(File folder) throws IOException {
@@ -186,50 +217,75 @@ public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider
         Options options = new Options();
         
         Option option = Option.builder()
-                .longOpt(OPTION_LOAD_MODEL)
+                .longOpt(OPTION_LOAD_MODEL).hasArg(false)
                 .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_9)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_10, OPTION_CLONE_MODEL))
+                .argName(Messages.CommitModelToRepositoryProvider_9)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_10, OPTION_LOAD_MODEL))
                 .build();
         options.addOption(option);
         
         option = Option.builder()
-                .longOpt(OPTION_CLONE_MODEL)
-                .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_11)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_12, OPTION_LOAD_MODEL))
+                .longOpt(OPTION_COMMIT_MODEL)
+                .hasArg(false)
+                .argName(Messages.CommitModelToRepositoryProvider_11)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_12, OPTION_COMMIT_MODEL))
                 .build();
         options.addOption(option);
+        
+        option = Option.builder()
+                .longOpt(OPTION_COMMIT_MESSAGE)
+                .hasArg()
+                .argName(Messages.CommitModelToRepositoryProvider_11)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_12, OPTION_COMMIT_MESSAGE))
+                .build();
+        options.addOption(option);
+        
+        option = Option.builder()
+                .longOpt(OPTION_PUSH_MODEL)
+                .hasArg(false)
+                .argName(Messages.CommitModelToRepositoryProvider_11)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_12, OPTION_PUSH_MODEL))
+                .build();
+        options.addOption(option);
+        
+        option = Option.builder()
+                .longOpt(OPTION_PUSH_CONFLICTS)
+                .hasArg()
+                .argName("pushConflicts")
+                .desc("Conflicts options break/ours/theirs")
+                .build();
+        options.addOption(option);
+        
         
         option = Option.builder()
                 .longOpt(OPTION_BRANCH_NAME)
                 .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_23)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_22, OPTION_BRANCH_NAME))
+                .argName(Messages.CommitModelToRepositoryProvider_23)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_22, OPTION_BRANCH_NAME))
                 .build();
         options.addOption(option);
         
         option = Option.builder()
                 .longOpt(OPTION_USERNAME)
                 .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_13)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_14, OPTION_CLONE_MODEL))
+                .argName(Messages.CommitModelToRepositoryProvider_13)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_14, OPTION_COMMIT_MODEL))
                 .build();
         options.addOption(option);
         
         option = Option.builder()
                 .longOpt(OPTION_PASSFILE)
                 .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_15)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_16, OPTION_CLONE_MODEL))
+                .argName(Messages.CommitModelToRepositoryProvider_15)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_16, OPTION_COMMIT_MODEL))
                 .build();
         options.addOption(option);
         
         option = Option.builder()
                 .longOpt(OPTION_SSH_IDENTITY_FILE)
                 .hasArg()
-                .argName(Messages.LoadModelFromRepositoryProvider_19)
-                .desc(NLS.bind(Messages.LoadModelFromRepositoryProvider_20, OPTION_CLONE_MODEL))
+                .argName(Messages.CommitModelToRepositoryProvider_19)
+                .desc(NLS.bind(Messages.CommitModelToRepositoryProvider_20, OPTION_COMMIT_MODEL))
                 .build();
         options.addOption(option);
 
@@ -237,12 +293,12 @@ public class LoadModelFromRepositoryProvider extends AbstractCommandLineProvider
     }
     
     private boolean hasCorrectOptions(CommandLine commandLine) {
-        return commandLine.hasOption(OPTION_CLONE_MODEL) || commandLine.hasOption(OPTION_LOAD_MODEL);
+        return commandLine.hasOption(OPTION_COMMIT_MODEL) || commandLine.hasOption(OPTION_PUSH_MODEL);
     }
     
     @Override
     public int getPriority() {
-        return PRIORITY_LOAD_OR_CREATE_MODEL;
+        return PRIORITY_REPORT_OR_EXPORT - 1;
     }
     
     @Override

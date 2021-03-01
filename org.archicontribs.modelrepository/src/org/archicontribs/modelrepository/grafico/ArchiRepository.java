@@ -21,6 +21,7 @@ import java.util.stream.Stream;
 
 import org.archicontribs.modelrepository.authentication.CredentialsAuthenticator;
 import org.archicontribs.modelrepository.authentication.UsernamePassword;
+import org.archicontribs.modelrepository.merge.Strategy;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jgit.api.AddCommand;
@@ -48,6 +49,7 @@ import org.eclipse.jgit.lib.ProgressMonitor;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.StoredConfig;
+import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -147,11 +149,17 @@ public class ArchiRepository implements IArchiRepository {
         }
     }
     
+	@Override
+    public String getRemoteURL()  throws GitAPIException, IOException{
+        try(Git git = Git.open(getLocalRepositoryFolder())) {
+            return git.getRepository().getConfig().getString("remote", "origin", "url");
+        }
+    }
+    
     @Override
     public RevCommit commitChanges(String commitMessage, boolean amend) throws GitAPIException, IOException {
         try(Git git = Git.open(getLocalRepositoryFolder())) {
             Status status = git.status().call();
-            
             // Nothing changed
             if(status.isClean()) {
                 return null;
@@ -181,10 +189,26 @@ public class ArchiRepository implements IArchiRepository {
         }
     }
     
+    
+    
     @Override
     public void cloneModel(String repoURL, UsernamePassword npw, ProgressMonitor monitor) throws GitAPIException, IOException {
         CloneCommand cloneCommand = Git.cloneRepository();
         cloneCommand.setDirectory(getLocalRepositoryFolder());
+        cloneCommand.setURI(repoURL);
+        cloneCommand.setTransportConfigCallback(CredentialsAuthenticator.getTransportConfigCallback(repoURL, npw));
+        cloneCommand.setProgressMonitor(monitor);
+
+        try(Git git = cloneCommand.call()) {
+            setDefaultConfigSettings(git.getRepository());
+        }
+    }
+    
+    @Override
+    public void cloneModel(String repoURL, String branch, UsernamePassword npw, ProgressMonitor monitor) throws GitAPIException, IOException {
+        CloneCommand cloneCommand = Git.cloneRepository();
+        cloneCommand.setDirectory(getLocalRepositoryFolder());
+        cloneCommand.setBranch(branch);
         cloneCommand.setURI(repoURL);
         cloneCommand.setTransportConfigCallback(CredentialsAuthenticator.getTransportConfigCallback(repoURL, npw));
         cloneCommand.setProgressMonitor(monitor);
@@ -209,13 +233,27 @@ public class ArchiRepository implements IArchiRepository {
             return result;
         }
     }
-    
+      
     @Override
     public PullResult pullFromRemote(UsernamePassword npw, ProgressMonitor monitor) throws IOException, GitAPIException {
         try(Git git = Git.open(getLocalRepositoryFolder())) {
             PullCommand pullCommand = git.pull();
             pullCommand.setTransportConfigCallback(CredentialsAuthenticator.getTransportConfigCallback(getOnlineRepositoryURL(), npw));
             pullCommand.setRebase(false); // Merge, not rebase
+            pullCommand.setProgressMonitor(monitor);
+            return pullCommand.call();
+        }
+    }
+    
+    @Override
+    public PullResult pullFromRemote(UsernamePassword npw, Strategy strategy,  ProgressMonitor monitor) throws IOException, GitAPIException {
+        try(Git git = Git.open(getLocalRepositoryFolder())) {
+            PullCommand pullCommand = git.pull();
+            pullCommand.setTransportConfigCallback(CredentialsAuthenticator.getTransportConfigCallback(getOnlineRepositoryURL(), npw));
+            pullCommand.setRebase(false); // Merge, not rebase
+            if(strategy != null) {
+            	pullCommand.setStrategy(strategy.getStrategy());	
+            }
             pullCommand.setProgressMonitor(monitor);
             return pullCommand.call();
         }
